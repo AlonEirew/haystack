@@ -529,8 +529,21 @@ class FAISSDocumentStore(SQLDocumentStore):
             config_path = index_path.with_suffix(".json")
 
         faiss.write_index(self.faiss_indexes[self.index], str(index_path))
+
+        json_config = {
+            "sql_url": self.pipeline_config["params"]["sql_url"],
+            "vector_dim": self.pipeline_config["params"]["vector_dim"],
+            "faiss_index_factory_str": self.pipeline_config["params"]["faiss_index_factory_str"],
+            "return_embedding": self.pipeline_config["params"]["return_embedding"],
+            "duplicate_documents": self.pipeline_config["params"]["duplicate_documents"],
+            "index": self.pipeline_config["params"]["index"],
+            "similarity": self.pipeline_config["params"]["similarity"],
+            "embedding_field": self.pipeline_config["params"]["embedding_field"],
+            "progress_bar": self.pipeline_config["params"]["progress_bar"]
+        }
+
         with open(config_path, 'w') as ipp:
-            json.dump(self.pipeline_config["params"], ipp)
+            json.dump(json_config, ipp)
 
     def _load_init_params_from_config(self, index_path: Union[str, Path], config_path: Optional[Union[str, Path]] = None):
         if not config_path:
