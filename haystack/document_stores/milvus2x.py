@@ -1,4 +1,5 @@
 import logging
+import warnings
 from typing import TYPE_CHECKING, Any, Dict, Generator, List, Optional, Union
 
 if TYPE_CHECKING:
@@ -59,7 +60,8 @@ class Milvus2DocumentStore(SQLDocumentStore):
             port: str = "19530",
             connection_pool: str = "SingletonThread",
             index: str = "document",
-            vector_dim: int = 768,
+            vector_dim: int = None,
+            embedding_dim: int = 768,
             index_file_size: int = 1024,
             similarity: str = "dot_product",
             index_type: str = "IVF_FLAT",
@@ -71,6 +73,7 @@ class Milvus2DocumentStore(SQLDocumentStore):
             custom_fields: Optional[List[Any]] = None,
             progress_bar: bool = True,
             duplicate_documents: str = 'overwrite',
+            isolation_level: str = None
     ):
         """
         :param sql_url: SQL connection URL for storing document texts and metadata. It defaults to a local, file based SQLite DB. For large scale
@@ -81,7 +84,8 @@ class Milvus2DocumentStore(SQLDocumentStore):
                            See https://milvus.io/docs/v1.0.0/install_milvus.md for instructions to start a Milvus instance.
         :param connection_pool: Connection pool type to connect with Milvus server. Default: "SingletonThread".
         :param index: Index name for text, embedding and metadata (in Milvus terms, this is the "collection name").
-        :param vector_dim: The embedding vector size. Default: 768.
+        :param vector_dim: Deprecated. Use embedding_dim instead.
+        :param embedding_dim: The embedding vector size. Default: 768.
         :param index_file_size: Specifies the size of each segment file that is stored by Milvus and its default value is 1024 MB.
          When the size of newly inserted vectors reaches the specified volume, Milvus packs these vectors into a new segment.
          Milvus creates one index file for each segment. When conducting a vector search, Milvus searches all index files one by one.
@@ -115,15 +119,17 @@ class Milvus2DocumentStore(SQLDocumentStore):
                                     overwrite: Update any existing documents with the same ID when adding documents.
                                     fail: an error is raised if the document ID of the document being added already
                                     exists.
+        :param isolation_level: see SQLAlchemy's `isolation_level` parameter for `create_engine()` (https://docs.sqlalchemy.org/en/14/core/engines.html#sqlalchemy.create_engine.params.isolation_level)
         """
 
         # save init parameters to enable export of component config as YAML
         self.set_config(
             sql_url=sql_url, host=host, port=port, connection_pool=connection_pool, index=index, vector_dim=vector_dim,
-            index_file_size=index_file_size, similarity=similarity, index_type=index_type, index_param=index_param,
+            embedding_dim=embedding_dim, index_file_size=index_file_size, similarity=similarity, index_type=index_type, index_param=index_param,
             search_param=search_param, duplicate_documents=duplicate_documents, id_field=id_field,
             return_embedding=return_embedding, embedding_field=embedding_field, progress_bar=progress_bar,
             custom_fields=custom_fields,
+            isolation_level=isolation_level
         )
 
         logger.warning("Milvus2DocumentStore is in experimental state until Milvus 2.0 is released")
@@ -135,7 +141,13 @@ class Milvus2DocumentStore(SQLDocumentStore):
         connections.add_connection(default={"host": host, "port": port})
         connections.connect()
 
-        self.vector_dim = vector_dim
+        if vector_dim is not None:
+            warnings.warn("The 'vector_dim' parameter is deprecated, "
+                          "use 'embedding_dim' instead.", DeprecationWarning, 2)
+            self.embedding_dim = vector_dim
+        else:
+            self.embedding_dim = embedding_dim
+
         self.index_file_size = index_file_size
 
         if similarity == "dot_product":
@@ -164,7 +176,8 @@ class Milvus2DocumentStore(SQLDocumentStore):
         super().__init__(
             url=sql_url,
             index=index,
-            duplicate_documents=duplicate_documents
+            duplicate_documents=duplicate_documents,
+            isolation_level=isolation_level,
         )
 
     def _create_collection_and_index_if_not_exist(
@@ -187,7 +200,7 @@ class Milvus2DocumentStore(SQLDocumentStore):
         if not has_collection:
             fields = [
                 FieldSchema(name=self.id_field, dtype=DataType.INT64, is_primary=True, auto_id=True),
-                FieldSchema(name=self.embedding_field, dtype=DataType.FLOAT_VECTOR, dim=self.vector_dim)
+                FieldSchema(name=self.embedding_field, dtype=DataType.FLOAT_VECTOR, dim=self.embedding_dim)
             ]
 
             for field in custom_fields:

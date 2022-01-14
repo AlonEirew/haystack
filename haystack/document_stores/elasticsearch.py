@@ -551,12 +551,14 @@ class ElasticsearchDocumentStore(BaseDocumentStore):
         if labels_to_index:
             bulk(self.client, labels_to_index, request_timeout=300, refresh=self.refresh_type, headers=headers)
 
-    def update_document_meta(self, id: str, meta: Dict[str, str], headers: Optional[Dict[str, str]] = None):
+    def update_document_meta(self, id: str, meta: Dict[str, str], headers: Optional[Dict[str, str]] = None, index: str = None):
         """
         Update the metadata dictionary of a document by specifying its string id
         """
+        if not index:
+            index = self.index
         body = {"doc": meta}
-        self.client.update(index=self.index, id=id, body=body, refresh=self.refresh_type, headers=headers)
+        self.client.update(index=index, id=id, body=body, refresh=self.refresh_type, headers=headers)
 
     def get_document_count(self, filters: Optional[Dict[str, List[str]]] = None, index: Optional[str] = None,
                            only_documents_without_embedding: bool = False, headers: Optional[Dict[str, str]] = None) -> int:
@@ -957,7 +959,7 @@ class ElasticsearchDocumentStore(BaseDocumentStore):
         if name:
             meta_data["name"] = name
 
-        score = hit["_score"] if hit["_score"] else None
+        score = hit["_score"]
         if score:
             if adapt_score_for_embedding:
                 score = self._scale_embedding_score(score)
